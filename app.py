@@ -14,22 +14,19 @@ def analysis():
     # Try to get the URI from the JSON
     try:
         get_json = request.get_json()
+        if not get_json or 'uri' not in get_json:
+            return jsonify({'error': 'Missing URI in JSON'}), 400
         image_uri = get_json['uri']
-    except:
-        return jsonify({'error': 'Missing URI in JSON'}), 400
-    
+    except Exception as e:
+        return jsonify({'error': f'Error parsing JSON: {str(e)}'}), 400
+
     # Try to get the text from the image
     try:
         res = read_image(image_uri)
-        
-        response_data = {
-            "text": res
-        }
-    
+        response_data = {"text": res}
         return jsonify(response_data), 200
-    except:
-        return jsonify({'error': 'Error in processing'}), 500
-
+    except Exception as e:
+        return jsonify({'error': f'Error in processing: {str(e)}'}), 500
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=3000, debug=True)

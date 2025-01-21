@@ -1,49 +1,58 @@
 from azure.cognitiveservices.vision.computervision import ComputerVisionClient
 from msrest.authentication import CognitiveServicesCredentials
 from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
+import os
 import time
+from dotenv import load_dotenv
 
-endpoint = "ENTER ENDPOINT HERE"
-key = "ENTER KEY HERE"
+# Explicitly specify the .env file location
+load_dotenv(dotenv_path=".env")
 
+endpoint = os.getenv("AZURE_ENDPOINT")
+key = os.getenv("AZURE_KEY")
+
+# Validate that credentials are loaded
+if not endpoint or not key:
+    raise ValueError("Azure credentials (endpoint and key) are not set in the environment variables.")
+
+# Initialize the Computer Vision Client
 credentials = CognitiveServicesCredentials(key)
-
-client = ComputerVisionClient(
-    endpoint=endpoint,
-    credentials=credentials
-)
+client = ComputerVisionClient(endpoint=endpoint, credentials=credentials)
 
 def read_image(uri):
-    numberOfCharsInOperationId = 36
-    maxRetries = 10
+    try:
+        numberOfCharsInOperationId = 36
+        maxRetries = 10
 
-    # SDK call
-    rawHttpResponse = client.read(uri, language="en", raw=True)
+        print(f"Sending image URI to Azure: {uri}")
+        rawHttpResponse = client.read(uri, language="en", raw=True)
 
-    # Get ID from returned headers
-    operationLocation = rawHttpResponse.headers["Operation-Location"]
-    idLocation = len(operationLocation) - numberOfCharsInOperationId
-    operationId = operationLocation[idLocation:]
+        operationLocation = rawHttpResponse.headers["Operation-Location"]
+        operationId = operationLocation[-numberOfCharsInOperationId:]
 
-    # SDK call
-    result = client.get_read_result(operationId)
-    
-    # Try API
-    retry = 0
-    
-    while retry < maxRetries:
-        if result.status.lower () not in ['notstarted', 'running']:
-            break
-        time.sleep(1)
-        result = client.get_read_result(operationId)
-        
-        retry += 1
-    
-    if retry == maxRetries:
-        return "max retries reached"
+        retry = 0
+        while retry < maxRetries:
+            result = client.get_read_result(operationId)
+            print(f"Polling result: {result.status}")
 
-    if result.status == OperationStatusCodes.succeeded:
-        res_text = " ".join([line.text for line in result.analyze_result.read_results[0].lines])
-        return res_text
-    else:
-        return "error"
+            if result.status.lower() not in ['notstarted', 'running']:
+                break
+
+            time.sleep(1)
+            retry += 1
+
+        if retry == maxRetries:
+            print("Max retries reached.")
+            return ""
+
+        if result.status == OperationStatusCodes.succeeded:
+            extracted_text = " ".join([line.text for line in result.analyze_result.read_results[0].lines])
+            print(f"Extracted text: {extracted_text}")
+            return extracted_text
+        else:
+            print("Azure API processing failed.")
+            return ""
+
+    except Exception as e:
+        print(f"Error in read_image: {e}")
+        return ""
